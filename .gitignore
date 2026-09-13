@@ -1,0 +1,52 @@
+# Environment and local configuration
+.env
+.env.*
+!.env.example
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python bytecode and tooling caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Packaging and build output
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+
+# Local document-processing data and generated artifacts
+data/
+uploads/
+output/
+outputs/
+parsed_documents/
+vector_store/
+chroma_db/
+*.sqlite
+*.db
+
+# Logs
+*.log
+logs/
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
