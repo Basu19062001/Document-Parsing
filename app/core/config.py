@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     # Future: PostgreSQL Database (Phase 2)
     DATABASE_URL: str | None = None
 
+    # Documentation Access Credentials (HTTP Basic Auth)
+    DOCS_USERNAME: str = "admin"
+    DOCS_PASSWORD: str = "admin123"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

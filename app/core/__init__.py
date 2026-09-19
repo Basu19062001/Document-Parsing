@@ -15,11 +15,13 @@ from app.core.exceptions import (
 )
 from app.core.logging import setup_logging
 from app.core.middleware import RequestLoggingMiddleware
+from app.core.security import verify_docs_credentials
 
 __all__ = [
     "settings",
     "setup_logging",
     "RequestLoggingMiddleware",
+    "verify_docs_credentials",
     "AppException",
     "StorageError",
     "StorageWriteError",

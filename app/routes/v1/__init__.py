@@ -5,9 +5,7 @@ v1_router = APIRouter()
 
 # Centralized V1 Route Registration with explicit prefixes and tags
 v1_router.include_router(
-    document_router,
-    prefix="/documents",
-    tags=["Documents"],
+    document_router, prefix="/documents", tags=["Documents"],
 )
 
 __all__ = ["v1_router"]
