@@ -22,7 +22,7 @@ class CorrelationIdFilter(logging.Filter):
 def setup_logging(log_level: Optional[int] = None) -> None:
     """
     Configures centralized structured logging for the application.
-    Includes timestamps, severity levels, correlation IDs, and file/line references.
+    Uses sys.stderr (unbuffered) so logs appear instantaneously in PowerShell/CMD terminals.
     """
     if log_level is None:
         log_level = logging.DEBUG if settings.DEBUG else logging.INFO
@@ -31,19 +31,20 @@ def setup_logging(log_level: Optional[int] = None) -> None:
     log_format = "%(asctime)s | %(levelname)-8s | [%(request_id)s] %(name)s:%(lineno)d - %(message)s"
     formatter = logging.Formatter(fmt=log_format, datefmt="%Y-%m-%d %H:%M:%S")
 
-    # Console Handler
-    handler = logging.StreamHandler(sys.stdout)
+    # Use sys.stderr: standard stream for logs, completely unbuffered on Windows/Linux
+    handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(formatter)
     handler.addFilter(CorrelationIdFilter())
 
-    # Configure root logger
+    # 1. Configure the root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
-
-    # Avoid duplicate handlers if setup_logging is called multiple times
     root_logger.handlers.clear()
     root_logger.addHandler(handler)
 
-    # Silence overly verbose third-party loggers
-    logging.getLogger("uvicorn.access").handlers.clear()
-    logging.getLogger("uvicorn.access").propagate = False
+    # 2. Configure the 'app' hierarchy explicitly
+    app_logger = logging.getLogger("app")
+    app_logger.setLevel(log_level)
+    app_logger.handlers.clear()
+    app_logger.addHandler(handler)
+    app_logger.propagate = False

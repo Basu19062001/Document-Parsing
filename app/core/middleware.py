@@ -27,14 +27,14 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         client_ip = request.client.host if request.client else "unknown"
         start_time = time.perf_counter()
 
-        logger.info(f"──> {request.method} {request.url.path} [Client: {client_ip}]")
+        logger.info(f"--> {request.method} {request.url.path} [Client: {client_ip}]")
 
         try:
             response = await call_next(request)
             duration_ms = (time.perf_counter() - start_time) * 1000
 
             logger.info(
-                f"<── {request.method} {request.url.path} {response.status_code} ({duration_ms:.1f}ms)"
+                f"<-- {request.method} {request.url.path} {response.status_code} ({duration_ms:.1f}ms)"
             )
 
             # Inject diagnostic headers for frontend/client observability
@@ -46,7 +46,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         except Exception as exc:
             duration_ms = (time.perf_counter() - start_time) * 1000
             logger.error(
-                f"<── {request.method} {request.url.path} FAILED with {type(exc).__name__} ({duration_ms:.1f}ms): {exc}"
+                f"<-- {request.method} {request.url.path} FAILED with {type(exc).__name__} ({duration_ms:.1f}ms): {exc}"
             )
             raise exc
 
