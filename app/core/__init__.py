@@ -13,9 +13,13 @@ from app.core.exceptions import (
     StorageWriteError,
     UnsupportedExtensionError,
 )
+from app.core.logging import setup_logging
+from app.core.middleware import RequestLoggingMiddleware
 
 __all__ = [
     "settings",
+    "setup_logging",
+    "RequestLoggingMiddleware",
     "AppException",
     "StorageError",
     "StorageWriteError",
@@ -29,3 +33,4 @@ __all__ = [
     "InvalidMagicBytesError",
     "CorruptedDocumentError",
 ]
+

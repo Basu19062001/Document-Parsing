@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from fastapi import UploadFile
 
@@ -10,6 +11,8 @@ from app.core.exceptions import (
     UnsupportedExtensionError,
 )
 from app.validators.strategies import get_structure_validator
+
+logger = logging.getLogger("app.validators.pipeline")
 
 
 @dataclass(frozen=True)
@@ -63,10 +66,14 @@ class DocumentValidator:
             6. Deep Document Structural Integrity Check
             7. Accept & Return ValidationResult
         """
+        raw_filename = file.filename or "unknown"
+        logger.debug(f"Starting 6-stage validation pipeline for file: '{raw_filename}'")
+
         # =====================================================================
         # Stage 1: Presence Check
         # =====================================================================
         if file is None or not file.filename or not file.filename.strip():
+            logger.warning("Stage 1 Failed: File is missing or filename is empty.")
             raise EmptyFileError("No document was provided or filename is empty.")
 
         filename = file.filename.strip()
@@ -75,6 +82,10 @@ class DocumentValidator:
         # Stage 2: Fast File Size Pre-check (if size reported by client)
         # =====================================================================
         if file.size is not None and file.size > self.max_file_size_bytes:
+            logger.warning(
+                f"Stage 2 Failed: Reported file size ({file.size} bytes) "
+                f"exceeds limit ({self.max_file_size_bytes} bytes)."
+            )
             raise FileSizeLimitExceededError(
                 f"File size ({file.size} bytes) exceeds limit of {self.max_file_size_bytes} bytes.",
                 details={"file_size_bytes": file.size, "max_limit_bytes": self.max_file_size_bytes}
@@ -84,6 +95,7 @@ class DocumentValidator:
         # Stage 3: Extension Whitelist Validation
         # =====================================================================
         if "." not in filename:
+            logger.warning(f"Stage 3 Failed: Filename '{filename}' has no extension.")
             raise UnsupportedExtensionError(
                 "Document filename lacks an extension.",
                 details={"filename": filename}
@@ -91,6 +103,9 @@ class DocumentValidator:
 
         extension = filename.rsplit(".", 1)[-1].lower()
         if extension not in settings.ALLOWED_EXTENSIONS:
+            logger.warning(
+                f"Stage 3 Failed: Extension '.{extension}' not allowed. Permitted: {settings.ALLOWED_EXTENSIONS}"
+            )
             raise UnsupportedExtensionError(
                 f"Extension '.{extension}' is not permitted. Allowed: {list(settings.ALLOWED_EXTENSIONS)}",
                 details={"extension": extension, "allowed": list(settings.ALLOWED_EXTENSIONS)}
@@ -103,6 +118,9 @@ class DocumentValidator:
         expected_mimes = _EXPECTED_MIME_TYPES.get(extension, set())
 
         if content_type not in expected_mimes:
+            logger.warning(
+                f"Stage 4 Failed: MIME type '{content_type}' is invalid for extension '.{extension}'."
+            )
             raise InvalidMimeTypeError(
                 f"MIME type '{content_type}' is invalid for extension '.{extension}'.",
                 details={
@@ -120,13 +138,20 @@ class DocumentValidator:
             header = await file.read(len(magic_prefix))
             
             if len(header) == 0:
+                logger.warning(f"Stage 5 Failed: File '{filename}' is empty (0 bytes).")
                 raise EmptyFileError("Uploaded file contains 0 bytes.")
 
             if header != magic_prefix:
+                logger.warning(
+                    f"Stage 5 Failed: Magic byte mismatch for '.{extension}'. "
+                    f"Expected {magic_prefix}, got {header}."
+                )
                 raise InvalidMagicBytesError(
                     f"File signature mismatch for '.{extension}'. File content does not match extension.",
                     details={"extension": extension}
                 )
+
+            logger.debug(f"Stage 5 Passed: Magic bytes confirmed for '.{extension}'")
 
             # Read remaining bytes for Stage 6 while tracking size
             chunks: list[bytes] = [header]
@@ -135,6 +160,10 @@ class DocumentValidator:
             while chunk := await file.read(self.chunk_size_bytes):
                 total_bytes += len(chunk)
                 if total_bytes > self.max_file_size_bytes:
+                    logger.warning(
+                        f"Stage 2 Failed during stream read: Total bytes ({total_bytes}) "
+                        f"exceeded maximum limit of {self.max_file_size_bytes} bytes."
+                    )
                     raise FileSizeLimitExceededError(
                         f"File size exceeded maximum limit of {self.max_file_size_bytes} bytes.",
                         details={"max_limit_bytes": self.max_file_size_bytes}
@@ -146,12 +175,17 @@ class DocumentValidator:
             # =================================================================
             # Stage 6: Actual Document Structure Validation (Strategy Pattern)
             # =================================================================
+            logger.debug(f"Stage 6: Dispatching deep structural check for '{filename}' ({extension})")
             structure_validator = get_structure_validator(extension)
             structure_validator.validate_structure(file_content)
+            logger.debug(f"Stage 6 Passed: Structural integrity confirmed for '{filename}'")
 
             # =================================================================
             # Stage 7: Accept
             # =================================================================
+            logger.info(
+                f"Validation Pipeline Complete: '{filename}' accepted ({extension}, {total_bytes} bytes)"
+            )
             return ValidationResult(
                 filename=filename,
                 extension=extension,

@@ -1,11 +1,14 @@
+import logging
 import shutil
 from pathlib import Path
 from uuid import UUID
 from fastapi import UploadFile
 
 from app.core.config import settings
-from app.storage.base import BaseStorage
 from app.core.exceptions import StorageDeleteError, StorageWriteError
+from app.storage.base import BaseStorage
+
+logger = logging.getLogger("app.storage.local")
 
 
 class LocalStorage(BaseStorage):
@@ -52,6 +55,8 @@ class LocalStorage(BaseStorage):
         file_path = self.get_file_path(document_id, extension)
         bytes_written = 0
 
+        logger.debug(f"Preparing storage directory for doc_id={document_id} at '{doc_dir}'")
+
         try:
             # Ensure document directory exists
             doc_dir.mkdir(parents=True, exist_ok=True)
@@ -63,16 +68,25 @@ class LocalStorage(BaseStorage):
 
                     # Defensive check during write
                     if bytes_written > self.max_file_size_bytes:
+                        logger.warning(
+                            f"Write aborted for doc_id={document_id}: "
+                            f"exceeded maximum limit of {self.max_file_size_bytes} bytes."
+                        )
                         raise StorageWriteError(
                             f"File size exceeded maximum limit of {self.max_file_size_bytes} bytes."
                         )
 
                     destination.write(chunk)
 
+            logger.info(f"Streamed {bytes_written} bytes to '{file_path}' for doc_id={document_id}")
             return file_path, bytes_written
 
         except Exception as exc:
             # Transactional Rollback: Remove corrupted or partially written directory
+            logger.error(
+                f"Storage failure writing doc_id={document_id} to '{file_path}': {exc}. "
+                f"Initiating rollback cleanup."
+            )
             await self.delete(document_id)
             if isinstance(exc, StorageWriteError):
                 raise
@@ -88,12 +102,15 @@ class LocalStorage(BaseStorage):
         """
         doc_dir = self.get_document_dir(document_id)
         if not doc_dir.exists():
+            logger.debug(f"Cannot delete non-existent directory '{doc_dir}' for doc_id={document_id}")
             return False
 
         try:
             shutil.rmtree(doc_dir)
+            logger.info(f"Successfully deleted document directory '{doc_dir}' for doc_id={document_id}")
             return True
         except Exception as exc:
+            logger.error(f"Failed to delete directory '{doc_dir}' for doc_id={document_id}: {exc}")
             raise StorageDeleteError(
                 f"Failed to delete document directory '{doc_dir}': {exc}"
             ) from exc
