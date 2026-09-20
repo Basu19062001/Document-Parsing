@@ -195,3 +195,38 @@ class CorruptedDocumentError(DocumentValidationError):
             status_code=422,  # Unprocessable Entity
             details=details,
         )
+
+
+# =====================================================================
+# Database & Domain Exceptions
+# =====================================================================
+
+class DocumentNotFoundError(AppException):
+    """Raised when a requested document ID does not exist in the database."""
+    def __init__(
+        self, 
+        message: str = "Document not found.", 
+        details: Optional[Dict[str, Any]] = None
+    ) -> None:
+        super().__init__(
+            message=message,
+            error_code="DOCUMENT_NOT_FOUND",
+            status_code=404,
+            details=details,
+        )
+
+
+class DatabaseError(AppException):
+    """Raised when a database query or persistence operation fails."""
+    def __init__(
+        self,
+        message: str = "Database operation failed.",
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            error_code="DATABASE_ERROR",
+            status_code=500,
+            details=details,
+        )
+

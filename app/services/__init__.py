@@ -1,16 +1,23 @@
-from app.services.document_service import DocumentService
-from app.storage import get_storage
-from app.validators import get_validator
+from fastapi import Depends
 
-def get_document_service() -> DocumentService:
+from app.repositories import DocumentRepository, get_document_repository
+from app.services.document_service import DocumentService
+from app.storage import BaseStorage, get_storage
+from app.validators import DocumentValidator, get_validator
+
+
+def get_document_service(
+    repository: DocumentRepository = Depends(get_document_repository),
+    storage: BaseStorage = Depends(get_storage),
+    validator: DocumentValidator = Depends(get_validator),
+) -> DocumentService:
     """
     Factory provider for FastAPI dependency injection.
-    Creates DocumentService with injected storage and validator strategies.
+    Creates DocumentService with injected repository, storage, and validator strategies.
     """
-    storage = get_storage()
-    validator = get_validator()
     return DocumentService(
-        storage=storage,      
+        repository=repository,
+        storage=storage,
         validator=validator,
     )
 
@@ -19,3 +26,4 @@ __all__ = [
     "DocumentService",
     "get_document_service",
 ]
+

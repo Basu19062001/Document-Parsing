@@ -12,6 +12,8 @@ from app.core.exceptions import (
     StorageFileNotFoundError,
     StorageWriteError,
     UnsupportedExtensionError,
+    DocumentNotFoundError,
+    DatabaseError,
 )
 from app.core.logging import setup_logging
 from app.core.middleware import RequestLoggingMiddleware
@@ -34,5 +36,7 @@ __all__ = [
     "InvalidMimeTypeError",
     "InvalidMagicBytesError",
     "CorruptedDocumentError",
+    "DocumentNotFoundError",
+    "DatabaseError",
 ]
 
