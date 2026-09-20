@@ -89,13 +89,31 @@ class DocumentService:
         # Persist metadata to database with Dual-Persistence Rollback
         try:
             persisted_doc = await self.repository.create(doc_record)
-        except Exception as exc:
+        except DatabaseError as db_err:
             logger.error(
                 f"Database persistence failed for document_id={document_id}. "
+                f"Executing dual-persistence storage rollback."
+            )
+            try:
+                await self.storage.delete(document_id)
+            except Exception as rollback_err:
+                logger.critical(
+                    f"CRITICAL: Storage rollback failed for doc_id={document_id}. "
+                    f"Orphan file may exist! Rollback error: {rollback_err}"
+                )
+            raise db_err
+        except Exception as exc:
+            logger.error(
+                f"Unexpected failure during DB persistence for document_id={document_id}. "
                 f"Executing dual-persistence storage rollback. Error: {exc}"
             )
-            # Rollback: Clean up physical file to prevent orphan files
-            await self.storage.delete(document_id)
+            try:
+                await self.storage.delete(document_id)
+            except Exception as rollback_err:
+                logger.critical(
+                    f"CRITICAL: Storage rollback failed for doc_id={document_id}. "
+                    f"Orphan file may exist! Rollback error: {rollback_err}"
+                )
             raise DatabaseError(
                 message=f"Failed to record document metadata in database: {exc}",
                 details={"document_id": str(document_id), "original_error": str(exc)},

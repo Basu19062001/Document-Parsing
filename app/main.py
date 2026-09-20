@@ -1,9 +1,11 @@
 import logging
 from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core import (
     AppException,
@@ -56,7 +58,7 @@ app.add_middleware(RequestLoggingMiddleware)
 @app.exception_handler(AppException)
 async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
     """
-    Translates any domain exception (Validation, Storage) into a 
+    Translates any domain exception (Validation, Storage, Database) into a 
     clean, RFC-compliant JSON response with machine-readable error codes.
     """
     logger.warning(
@@ -69,6 +71,48 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
             "error_code": exc.error_code,
             "message": exc.message,
             "details": exc.details,
+        },
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """
+    Translates FastAPI / Pydantic request parsing and query parameter errors
+    into our RFC-compliant JSON error envelope (HTTP 422).
+    """
+    logger.warning(
+        f"Request validation failed on {request.method} {request.url.path}: {exc.errors()}"
+    )
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "error_code": "REQUEST_VALIDATION_ERROR",
+            "message": "The incoming request parameters or payload failed validation.",
+            "details": {"errors": exc.errors()},
+        },
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(
+    request: Request, exc: StarletteHTTPException
+) -> JSONResponse:
+    """
+    Translates framework HTTP exceptions (e.g. 404 Not Found, 405 Method Not Allowed)
+    into our uniform JSON error envelope.
+    """
+    logger.warning(
+        f"HTTP {exc.status_code} on {request.method} {request.url.path}: {exc.detail}"
+    )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error_code": f"HTTP_{exc.status_code}",
+            "message": str(exc.detail),
+            "details": {},
         },
     )
 
