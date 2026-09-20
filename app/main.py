@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, Request, status
@@ -26,13 +27,26 @@ logger = logging.getLogger("app.main")
 async def lifespan(app: FastAPI):
     """
     Application Lifespan Management:
-    Initializes logging, verifies storage directories, and logs startup URLs.
+    1. Initializes logging and creates storage directories.
+    2. Runs Alembic migrations automatically to ensure database tables exist.
+    3. Logs service health and documentation endpoints.
     """
     settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     logger.info(
         f"Starting {settings.PROJECT_NAME} in [{settings.ENVIRONMENT.upper()}] mode | "
         f"Upload dir: '{settings.UPLOAD_DIR}'"
     )
+
+    # Automatically verify and apply pending Alembic migrations
+    try:
+        from alembic.config import Config
+        from alembic import command
+        alembic_cfg = Config("alembic.ini")
+        await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
+        logger.info("Database schema synchronized and up-to-date via Alembic.")
+    except Exception as exc:
+        logger.error(f"Failed to synchronize database migrations on startup: {exc}")
+
     logger.info("Swagger UI (Protected): /docs")
     logger.info("ReDoc (Protected): /redoc")
     logger.info("Health check endpoint: /health")

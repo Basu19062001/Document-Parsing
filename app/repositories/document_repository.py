@@ -39,7 +39,7 @@ class DocumentRepository(BaseRepository[DocumentModel]):
                 exc_info=True,
             )
             raise DatabaseError(
-                message=f"Database error while saving document: {exc}",
+                message="Failed to record document metadata in database.",
                 details={
                     "operation": "create",
                     "document_id": str(entity.id),
@@ -59,7 +59,7 @@ class DocumentRepository(BaseRepository[DocumentModel]):
                 exc_info=True,
             )
             raise DatabaseError(
-                message=f"Database error while fetching document: {exc}",
+                message="Failed to fetch document metadata from database.",
                 details={"operation": "get_by_id", "document_id": str(entity_id)},
             ) from exc
 
@@ -89,7 +89,7 @@ class DocumentRepository(BaseRepository[DocumentModel]):
                 exc_info=True,
             )
             raise DatabaseError(
-                message=f"Database error while updating document status: {exc}",
+                message="Failed to update document status in database.",
                 details={
                     "operation": "update_status",
                     "document_id": str(entity_id),
@@ -114,7 +114,7 @@ class DocumentRepository(BaseRepository[DocumentModel]):
                 exc_info=True,
             )
             raise DatabaseError(
-                message=f"Database error while retrieving documents: {exc}",
+                message="Failed to retrieve documents from database.",
                 details={"operation": "list_all", "skip": skip, "limit": limit},
             ) from exc
 
@@ -136,7 +136,7 @@ class DocumentRepository(BaseRepository[DocumentModel]):
                 exc_info=True,
             )
             raise DatabaseError(
-                message=f"Database error while deleting document: {exc}",
+                message="Failed to delete document from database.",
                 details={"operation": "delete", "document_id": str(entity_id)},
             ) from exc
 

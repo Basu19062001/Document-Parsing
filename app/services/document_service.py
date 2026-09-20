@@ -1,9 +1,11 @@
 import logging
 import uuid
+from pathlib import Path
 from typing import Sequence
 from uuid import UUID
 from fastapi import UploadFile
 
+from app.core.config import settings
 from app.core.exceptions import DatabaseError, DocumentNotFoundError
 from app.models.document import DocumentModel
 from app.repositories import DocumentRepository
@@ -75,11 +77,18 @@ class DocumentService:
             f"Path='{saved_path}' | Bytes={bytes_written}"
         )
 
+        # Store clean, relative path in DB (e.g. 'uploads/<doc_id>/original.pdf')
+        # This keeps database records portable across environments and prevents leaking server drive paths
+        try:
+            rel_file_path = Path(saved_path).relative_to(settings.BASE_DIR).as_posix()
+        except ValueError:
+            rel_file_path = Path(saved_path).as_posix()
+
         # Construct database entity
         doc_record = DocumentModel(
             id=document_id,
             filename=validation.filename,
-            file_path=str(saved_path),
+            file_path=rel_file_path,
             file_size_bytes=bytes_written,
             mime_type=validation.mime_type,
             extension=validation.extension,
@@ -115,8 +124,8 @@ class DocumentService:
                     f"Orphan file may exist! Rollback error: {rollback_err}"
                 )
             raise DatabaseError(
-                message=f"Failed to record document metadata in database: {exc}",
-                details={"document_id": str(document_id), "original_error": str(exc)},
+                message="An unexpected error occurred while persisting document metadata.",
+                details={"document_id": str(document_id)},
             ) from exc
 
         logger.info(
