@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Annotated, Literal, Union
+from typing import Annotated, Any, Literal, Union
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -154,7 +154,7 @@ class GenericElement(BaseElement):
         description="Raw text or string representation of the unclassified content",
         examples=["[Complex Vector Shape: Signature Block]"],
     )
-    metadata: dict[str, str] = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="Diagnostic metadata (e.g. original XML tag, bounding box, parser warnings)",
         examples=[{"source_tag": "w:drawing", "note": "Unclassified vector shape"}],
