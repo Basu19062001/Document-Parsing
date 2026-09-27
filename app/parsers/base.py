@@ -13,6 +13,9 @@ class BaseParser(ABC):
     converting raw physical documents into the canonical ParsedDocument AST.
     """
 
+    SUPPORTED_MIME_TYPES: list[str] = []
+    SUPPORTED_EXTENSIONS: list[str] = []
+
     @abstractmethod
     async def parse(
         self,

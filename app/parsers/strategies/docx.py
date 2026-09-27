@@ -52,6 +52,12 @@ class DocxParser(BaseParser):
        clean domain exceptions (CorruptedParsingError, EmptyDocumentError).
     """
 
+    SUPPORTED_MIME_TYPES: list[str] = [
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword",
+    ]
+    SUPPORTED_EXTENSIONS: list[str] = [".docx", ".doc"]
+
     async def parse(
         self,
         file_path: Path,

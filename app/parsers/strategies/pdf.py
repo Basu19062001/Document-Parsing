@@ -60,6 +60,9 @@ class PDFParser(BaseParser):
        to keep the FastAPI event loop responsive.
     """
 
+    SUPPORTED_MIME_TYPES: list[str] = ["application/pdf"]
+    SUPPORTED_EXTENSIONS: list[str] = [".pdf"]
+
     async def parse(
         self,
         file_path: Path,
