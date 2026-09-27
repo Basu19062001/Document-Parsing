@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import DatabaseError
 from app.models.document import DocumentModel
 from app.repositories.base import BaseRepository
+from app.schemas.document import DocumentStatus
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,47 @@ class DocumentRepository(BaseRepository[DocumentModel]):
                     "operation": "update_status",
                     "document_id": str(entity_id),
                     "status": status,
+                },
+            ) from exc
+
+    async def save_parsed_result(
+        self,
+        entity_id: UUID,
+        parsed_content: dict[str, Any],
+        word_count: int,
+        char_count: int,
+        total_pages: Optional[int],
+    ) -> Optional[DocumentModel]:
+        """
+        Stores the canonical AST JSON and extracted metrics in the document record,
+        transitioning the status to PARSED and clearing error details.
+        """
+        try:
+            document = await self.get_by_id(entity_id)
+            if not document:
+                return None
+            document.status = DocumentStatus.PARSED.value
+            document.parsed_content = parsed_content
+            document.word_count = word_count
+            document.char_count = char_count
+            document.total_pages = total_pages
+            document.error_message = None
+            await self.session.flush()
+            await self.session.refresh(document)
+            logger.debug(f"Saved parsed result for doc_id={entity_id} ({word_count} words, {char_count} chars)")
+            return document
+        except DatabaseError:
+            raise
+        except SQLAlchemyError as exc:
+            logger.error(
+                f"Failed to save parsed result for document id={entity_id}: {exc}",
+                exc_info=True,
+            )
+            raise DatabaseError(
+                message="Failed to persist parsed document content to database.",
+                details={
+                    "operation": "save_parsed_result",
+                    "document_id": str(entity_id),
                 },
             ) from exc
 

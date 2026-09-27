@@ -20,6 +20,8 @@ from app.core.exceptions import (
     CorruptedParsingError,
     UnsupportedParserError,
     ParsingTimeoutError,
+    DocumentAlreadyProcessingError,
+    DocumentNotParsedError,
 )
 from app.core.logging import setup_logging
 from app.core.middleware import RequestLoggingMiddleware
@@ -50,5 +52,7 @@ __all__ = [
     "CorruptedParsingError",
     "UnsupportedParserError",
     "ParsingTimeoutError",
+    "DocumentAlreadyProcessingError",
+    "DocumentNotParsedError",
 ]
 

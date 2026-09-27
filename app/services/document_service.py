@@ -6,10 +6,21 @@ from uuid import UUID
 from fastapi import UploadFile
 
 from app.core.config import settings
-from app.core.exceptions import DatabaseError, DocumentNotFoundError
+from app.core.exceptions import (
+    AppException,
+    CorruptedParsingError,
+    DatabaseError,
+    DocumentAlreadyProcessingError,
+    DocumentNotFoundError,
+    DocumentNotParsedError,
+    ParsingError,
+    StorageFileNotFoundError,
+)
 from app.models.document import DocumentModel
+from app.parsers import ParserFactory
 from app.repositories import DocumentRepository
 from app.schemas import DocumentResponse, DocumentStatus
+from app.schemas.parsing import ParsedDocument
 from app.storage import BaseStorage, get_storage
 from app.validators import DocumentValidator, get_validator
 
@@ -200,4 +211,189 @@ class DocumentService:
             )
             for doc in docs
         ]
+
+    async def parse_document(
+        self,
+        document_id: UUID,
+        force: bool = False,
+        strict_mode: bool | None = None,
+    ) -> ParsedDocument:
+        """
+        Orchestrates the document parsing workflow and state machine transitions:
+        1. Validates document existence in PostgreSQL (throws DocumentNotFoundError).
+        2. Enforces state machine concurrency guards (rejects concurrent PROCESSING;
+           returns cached AST if already PARSED and not forced).
+        3. Transitions status to PROCESSING.
+        4. Resolves portable stored path to verified physical filesystem path.
+        5. Obtains singleton parser strategy via ParserFactory.
+        6. Executes non-blocking parsing.
+        7. Persists the complete canonical AST into PostgreSQL JSONB (zero disk AST files).
+        8. Transitions status to PARSED on success, or FAILED with sanitized error message.
+
+        Args:
+            document_id: UUID of the document entity.
+            force: If True, forces re-parsing even if already in PARSED state.
+            strict_mode: Optional boolean override for parsing compliance.
+
+        Returns:
+            ParsedDocument containing the full canonical AST and metrics.
+
+        Raises:
+            DocumentNotFoundError: If the document record does not exist.
+            DocumentAlreadyProcessingError: If document is currently being parsed.
+            StorageFileNotFoundError: If the source physical file is missing from disk.
+            ParsingError: If extraction fails unrecoverably.
+        """
+        # Step 1: Verify document existence
+        doc = await self.repository.get_by_id(document_id)
+        if not doc:
+            raise DocumentNotFoundError(
+                message=f"Document with ID '{document_id}' was not found.",
+                details={"document_id": str(document_id)},
+            )
+
+        # Step 2: Enforce Finite State Machine concurrency & idempotency
+        if doc.status == DocumentStatus.PROCESSING.value:
+            logger.warning(f"Rejecting parse request for doc_id={document_id}: already in PROCESSING state.")
+            raise DocumentAlreadyProcessingError(
+                message="Document is currently being parsed. Please wait for completion.",
+                details={"document_id": str(document_id), "status": doc.status},
+            )
+
+        if doc.status == DocumentStatus.PARSED.value and not force:
+            if doc.parsed_content:
+                logger.info(f"Returning cached database AST for doc_id={document_id} (idempotent call).")
+                return ParsedDocument.model_validate(doc.parsed_content)
+
+        # Step 3: Transition state to PROCESSING
+        logger.info(f"Transitioning doc_id={document_id} to PROCESSING status.")
+        await self.repository.update_status(document_id, DocumentStatus.PROCESSING.value)
+
+        # Step 4: Resolve physical file path on disk
+        absolute_path = (settings.BASE_DIR / doc.file_path).resolve()
+        if not absolute_path.exists():
+            # Secondary fallback check relative to storage root
+            fallback_path = (self.storage.base_dir / str(doc.id) / f"original.{doc.extension}").resolve()
+            if fallback_path.exists():
+                absolute_path = fallback_path
+            else:
+                logger.error(f"Source file missing from storage for doc_id={document_id} at '{absolute_path}'")
+                err_msg = "Physical document file is missing from storage."
+                await self.repository.update_status(
+                    entity_id=document_id,
+                    status=DocumentStatus.FAILED.value,
+                    error_message=err_msg,
+                )
+                raise StorageFileNotFoundError(
+                    message=err_msg,
+                    details={"document_id": str(document_id), "expected_path": str(absolute_path)},
+                )
+
+        # Step 5: Resolve parser strategy from ParserFactory
+        norm_ext = f".{doc.extension}" if not doc.extension.startswith(".") else doc.extension
+        parser = ParserFactory.get_parser(mime_type=doc.mime_type, extension=norm_ext)
+        logger.info(
+            f"Resolved parser strategy '{parser.__class__.__name__}' for doc_id={document_id} "
+            f"(MIME='{doc.mime_type}', Ext='{norm_ext}')"
+        )
+
+        # Step 6 & 7: Execute parsing and persist AST directly to PostgreSQL JSONB
+        try:
+            parsed_doc = await parser.parse(
+                file_path=absolute_path,
+                document_id=doc.id,
+                filename=doc.filename,
+                strict_mode=strict_mode,
+            )
+
+            # Serialize AST model to JSON-compatible dictionary for PostgreSQL JSONB
+            ast_dict = parsed_doc.model_dump(mode="json")
+
+            await self.repository.save_parsed_result(
+                entity_id=doc.id,
+                parsed_content=ast_dict,
+                word_count=parsed_doc.word_count,
+                char_count=parsed_doc.char_count,
+                total_pages=parsed_doc.total_pages,
+            )
+
+            logger.info(
+                f"Document parsing successfully persisted to PostgreSQL for doc_id={document_id} | "
+                f"Elements={len(parsed_doc.elements)}, Words={parsed_doc.word_count}, "
+                f"Warnings={len(parsed_doc.warnings)}"
+            )
+            return parsed_doc
+
+        except AppException as app_exc:
+            # Domain parsing exception (EncryptedDocumentError, EmptyDocumentError, CorruptedParsingError)
+            logger.warning(
+                f"Domain parsing exception caught for doc_id={document_id}: {app_exc.message}"
+            )
+            await self.repository.update_status(
+                entity_id=document_id,
+                status=DocumentStatus.FAILED.value,
+                error_message=app_exc.message,
+            )
+            raise
+
+        except Exception as exc:
+            # Unhandled parser crash
+            logger.error(
+                f"Unhandled parsing error for doc_id={document_id}: {exc}",
+                exc_info=True,
+            )
+            sanitized_msg = "An unexpected error occurred while parsing the document."
+            await self.repository.update_status(
+                entity_id=document_id,
+                status=DocumentStatus.FAILED.value,
+                error_message=sanitized_msg,
+            )
+            raise ParsingError(
+                message=sanitized_msg,
+                details={"document_id": str(document_id)},
+            ) from exc
+
+    async def get_parsed_document(self, document_id: UUID) -> ParsedDocument:
+        """
+        Retrieves the persisted canonical AST of a parsed document from PostgreSQL JSONB.
+
+        Args:
+            document_id: UUID of the document entity.
+
+        Returns:
+            ParsedDocument containing the full AST elements and metrics.
+
+        Raises:
+            DocumentNotFoundError: If the document does not exist in database.
+            DocumentAlreadyProcessingError: If parsing is still actively in progress.
+            CorruptedParsingError: If previous parsing attempt failed.
+            DocumentNotParsedError: If document is still in UPLOADED state.
+        """
+        doc = await self.repository.get_by_id(document_id)
+        if not doc:
+            raise DocumentNotFoundError(
+                message=f"Document with ID '{document_id}' was not found.",
+                details={"document_id": str(document_id)},
+            )
+
+        if doc.status == DocumentStatus.PROCESSING.value:
+            raise DocumentAlreadyProcessingError(
+                message="Document is currently being parsed. Please wait for completion.",
+                details={"document_id": str(document_id), "status": doc.status},
+            )
+
+        if doc.status == DocumentStatus.FAILED.value:
+            raise CorruptedParsingError(
+                message=f"Document parsing failed previously: {doc.error_message or 'Unknown error'}",
+                details={"document_id": str(document_id), "error_message": doc.error_message},
+            )
+
+        if doc.status == DocumentStatus.UPLOADED.value or not doc.parsed_content:
+            raise DocumentNotParsedError(
+                message="Document has not been parsed yet. Trigger the parse endpoint first.",
+                details={"document_id": str(document_id), "status": doc.status},
+            )
+
+        return ParsedDocument.model_validate(doc.parsed_content)
+
 

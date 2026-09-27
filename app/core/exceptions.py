@@ -327,3 +327,33 @@ class ParsingTimeoutError(ParsingError):
         )
 
 
+class DocumentAlreadyProcessingError(ParsingError):
+    """Raised when parsing is triggered on a document currently in the PROCESSING state."""
+    def __init__(
+        self,
+        message: str = "Document is currently being parsed. Please wait for completion.",
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            error_code="DOCUMENT_ALREADY_PROCESSING",
+            status_code=409,
+            details=details,
+        )
+
+
+class DocumentNotParsedError(ParsingError):
+    """Raised when attempting to retrieve parsed content for an unparsed document."""
+    def __init__(
+        self,
+        message: str = "Document has not been parsed yet. Trigger the parse endpoint first.",
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            error_code="DOCUMENT_NOT_PARSED",
+            status_code=400,
+            details=details,
+        )
+
+
