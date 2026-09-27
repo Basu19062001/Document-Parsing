@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     def MAX_FILE_SIZE_BYTES(self) -> int:
         return self.MAX_FILE_SIZE_MB * 1024 * 1024
 
+    # Parser Engine Settings
+    # False: Fault-tolerant extraction (preserves valid pages, logs warnings for corrupt pages)
+    # True: Strict compliance mode (raises CorruptedParsingError on any page failure)
+    PARSER_STRICT_MODE: bool = False
+
     # Database Configuration (PostgreSQL + asyncpg)
     DB_USER: str = "postgres"
     DB_PASSWORD: str = "postgres"

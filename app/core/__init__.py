@@ -14,6 +14,12 @@ from app.core.exceptions import (
     UnsupportedExtensionError,
     DocumentNotFoundError,
     DatabaseError,
+    ParsingError,
+    EncryptedDocumentError,
+    EmptyDocumentError,
+    CorruptedParsingError,
+    UnsupportedParserError,
+    ParsingTimeoutError,
 )
 from app.core.logging import setup_logging
 from app.core.middleware import RequestLoggingMiddleware
@@ -38,5 +44,11 @@ __all__ = [
     "CorruptedDocumentError",
     "DocumentNotFoundError",
     "DatabaseError",
+    "ParsingError",
+    "EncryptedDocumentError",
+    "EmptyDocumentError",
+    "CorruptedParsingError",
+    "UnsupportedParserError",
+    "ParsingTimeoutError",
 ]
 

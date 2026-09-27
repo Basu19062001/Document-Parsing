@@ -230,3 +230,100 @@ class DatabaseError(AppException):
             details=details,
         )
 
+
+# =====================================================================
+# Document Parsing Exceptions (Phase 2)
+# =====================================================================
+
+class ParsingError(AppException):
+    """Base exception for all document parsing and extraction errors."""
+    def __init__(
+        self,
+        message: str = "An error occurred while parsing the document.",
+        error_code: str = "PARSING_ERROR",
+        status_code: int = 500,
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            error_code=error_code,
+            status_code=status_code,
+            details=details,
+        )
+
+
+class EncryptedDocumentError(ParsingError):
+    """Raised when a document is password-protected or encrypted."""
+    def __init__(
+        self,
+        message: str = "The document is password-protected and cannot be parsed.",
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            error_code="DOCUMENT_ENCRYPTED",
+            status_code=422,
+            details=details,
+        )
+
+
+class EmptyDocumentError(ParsingError):
+    """Raised when a document contains zero machine-readable text or tables (e.g. scanned image-only PDF)."""
+    def __init__(
+        self,
+        message: str = "The document contains no extractable text or tables. It may be a scanned image requiring OCR.",
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            error_code="DOCUMENT_EMPTY_TEXT",
+            status_code=422,
+            details=details,
+        )
+
+
+class CorruptedParsingError(ParsingError):
+    """Raised when internal document streams, tables, or XML structures are corrupted during parsing."""
+    def __init__(
+        self,
+        message: str = "Document structure is corrupted and could not be fully parsed.",
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            error_code="PARSING_FAILED_CORRUPTED",
+            status_code=422,
+            details=details,
+        )
+
+
+class UnsupportedParserError(ParsingError):
+    """Raised when no parser strategy is registered for the given file extension."""
+    def __init__(
+        self,
+        message: str = "No parser strategy is available for this document format.",
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            error_code="UNSUPPORTED_PARSER_TYPE",
+            status_code=415,
+            details=details,
+        )
+
+
+class ParsingTimeoutError(ParsingError):
+    """Raised when document extraction exceeds the execution timeout limit."""
+    def __init__(
+        self,
+        message: str = "Document parsing exceeded the maximum allowed time limit.",
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            error_code="PARSING_TIMEOUT",
+            status_code=504,
+            details=details,
+        )
+
+

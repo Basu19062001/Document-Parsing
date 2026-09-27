@@ -204,6 +204,11 @@ class ParsedDocument(BaseModel):
         description="Total characters extracted across all text elements",
         examples=[22100],
     )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Non-fatal extraction warnings recorded during fault-tolerant parsing",
+        examples=[["Page 6: Corrupted stream replaced with generic element placeholder"]],
+    )
     parsed_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="UTC timestamp when parsing completed",
