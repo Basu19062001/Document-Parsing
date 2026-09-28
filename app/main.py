@@ -37,11 +37,15 @@ async def lifespan(app: FastAPI):
         f"Upload dir: '{settings.UPLOAD_DIR}'"
     )
 
+    # Ensure structured logging is actively configured after Uvicorn startup
+    setup_logging()
+
     # Automatically verify and apply pending Alembic migrations
     try:
         from alembic.config import Config
         from alembic import command
         alembic_cfg = Config("alembic.ini")
+        alembic_cfg.attributes["configure_logger"] = False
         await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
         logger.info("Database schema synchronized and up-to-date via Alembic.")
     except Exception as exc:

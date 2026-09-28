@@ -100,3 +100,11 @@ def setup_logging(log_level: Optional[int] = None) -> None:
     app_logger.handlers.clear()
     app_logger.addHandler(handler)
     app_logger.propagate = False
+
+    # 3. Configure uvicorn loggers so server and access logs render with our formatter
+    for u_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        u_logger = logging.getLogger(u_name)
+        u_logger.setLevel(log_level)
+        u_logger.handlers.clear()
+        u_logger.addHandler(handler)
+        u_logger.propagate = False
