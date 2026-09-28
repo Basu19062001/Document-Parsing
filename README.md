@@ -278,13 +278,38 @@ GET /api/v1/documents/{document_id}
 
 ---
 
-### 3. Parse Document
+### 3. Parse Document (Command)
 ```http
 POST /api/v1/documents/{document_id}/parse?force=false
 ```
 **Description**: Executes the format-specific parsing strategy, updates status to `parsed`, and stores the canonical AST into PostgreSQL JSONB.
-- `force=false` *(default)*: Idempotent call; returns the cached database AST instantly without burning CPU.
+- Returns a lightweight `DocumentParseResponse` summary (**Command-Query Separation**).
+- `force=false` *(default)*: Idempotent call; returns the cached database summary instantly without burning CPU.
 - `force=true`: Re-runs the parsing pipeline.
+
+#### Response (`200 OK`):
+```json
+{
+  "document_id": "3ff1695d-8d1c-4da9-9b37-ebca57dd00ec",
+  "filename": "annual_financial_report.pdf",
+  "status": "parsed",
+  "total_pages": 2,
+  "word_count": 57,
+  "char_count": 453,
+  "total_elements": 8,
+  "warnings_count": 0,
+  "parsed_at": "2026-09-29T00:15:00Z",
+  "message": "Document parsed and persisted successfully"
+}
+```
+
+---
+
+### 4. Retrieve Canonical AST (Query)
+```http
+GET /api/v1/documents/{document_id}/parsed
+```
+**Description**: Retrieves the full pre-parsed canonical AST (`ParsedDocument`) and extraction metrics directly from PostgreSQL JSONB in $\mathcal{O}(1)$ time.
 
 #### Response (`200 OK`):
 ```json
@@ -294,7 +319,7 @@ POST /api/v1/documents/{document_id}/parse?force=false
   "total_pages": 2,
   "word_count": 57,
   "char_count": 453,
-  "parsed_at": "2026-09-28T01:32:18Z",
+  "parsed_at": "2026-09-29T00:15:00Z",
   "warnings": [],
   "elements": [
     {
@@ -322,14 +347,6 @@ POST /api/v1/documents/{document_id}/parse?force=false
   ]
 }
 ```
-
----
-
-### 4. Retrieve Canonical AST
-```http
-GET /api/v1/documents/{document_id}/parsed
-```
-**Description**: Retrieves the pre-parsed canonical AST directly from PostgreSQL JSONB in $\mathcal{O}(1)$ time.
 
 #### Response Codes:
 - `200 OK`: Canonical AST returned.

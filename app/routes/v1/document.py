@@ -1,7 +1,7 @@
 from uuid import UUID
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 
-from app.schemas import DocumentResponse
+from app.schemas import DocumentParseResponse, DocumentResponse
 from app.schemas.parsing import ParsedDocument
 from app.services import DocumentService, get_document_service
 
@@ -53,14 +53,14 @@ async def get_document(
 
 @router.post(
     "/{document_id}/parse",
-    response_model=ParsedDocument,
+    response_model=DocumentParseResponse,
     status_code=status.HTTP_200_OK,
     summary="Parse document content into canonical AST",
     description=(
         "Executes format-specific parsing strategy (DocxParser or PDFParser), resolves "
         "hierarchical breadcrumbs, extracts 2D tables as Markdown, and stores the "
-        "canonical AST into PostgreSQL JSONB. Idempotent by default: returns cached AST "
-        "if already parsed, unless 'force=true' is specified."
+        "canonical AST into PostgreSQL JSONB. Returns a lightweight operation summary "
+        "(Command-Query Separation). The full canonical AST can be retrieved via GET /{document_id}/parsed."
     ),
 )
 async def parse_document(
@@ -70,7 +70,7 @@ async def parse_document(
         description="Force re-parsing even if document was previously parsed successfully",
     ),
     service: DocumentService = Depends(get_document_service),
-) -> ParsedDocument:
+) -> DocumentParseResponse:
     """
     Triggers parsing workflow, state machine transition (PROCESSING -> PARSED/FAILED),
     and PostgreSQL JSONB persistence.

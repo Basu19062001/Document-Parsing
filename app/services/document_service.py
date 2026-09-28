@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 import uuid
 from pathlib import Path
@@ -19,7 +20,11 @@ from app.core.exceptions import (
 from app.models.document import DocumentModel
 from app.parsers import ParserFactory
 from app.repositories import DocumentRepository
-from app.schemas import DocumentResponse, DocumentStatus
+from app.schemas import (
+    DocumentParseResponse,
+    DocumentResponse,
+    DocumentStatus,
+)
 from app.schemas.parsing import ParsedDocument
 from app.storage import BaseStorage, get_storage
 from app.validators import DocumentValidator, get_validator
@@ -217,18 +222,19 @@ class DocumentService:
         document_id: UUID,
         force: bool = False,
         strict_mode: bool | None = None,
-    ) -> ParsedDocument:
+    ) -> DocumentParseResponse:
         """
         Orchestrates the document parsing workflow and state machine transitions:
         1. Validates document existence in PostgreSQL (throws DocumentNotFoundError).
         2. Enforces state machine concurrency guards (rejects concurrent PROCESSING;
-           returns cached AST if already PARSED and not forced).
+           returns cached AST summary if already PARSED and not forced).
         3. Transitions status to PROCESSING.
         4. Resolves portable stored path to verified physical filesystem path.
         5. Obtains singleton parser strategy via ParserFactory.
         6. Executes non-blocking parsing.
-        7. Persists the complete canonical AST into PostgreSQL JSONB (zero disk AST files).
-        8. Transitions status to PARSED on success, or FAILED with sanitized error message.
+        7. Persists the complete canonical AST into PostgreSQL JSONB.
+        8. Returns a lightweight DocumentParseResponse (Command-Query Separation).
+           The full canonical AST can be fetched at any time via get_parsed_document().
 
         Args:
             document_id: UUID of the document entity.
@@ -236,7 +242,7 @@ class DocumentService:
             strict_mode: Optional boolean override for parsing compliance.
 
         Returns:
-            ParsedDocument containing the full canonical AST and metrics.
+            DocumentParseResponse containing status confirmation and extraction metrics.
 
         Raises:
             DocumentNotFoundError: If the document record does not exist.
@@ -262,8 +268,23 @@ class DocumentService:
 
         if doc.status == DocumentStatus.PARSED.value and not force:
             if doc.parsed_content:
-                logger.info(f"Returning cached database AST for doc_id={document_id} (idempotent call).")
-                return ParsedDocument.model_validate(doc.parsed_content)
+                logger.info(f"Returning cached database AST summary for doc_id={document_id} (idempotent call).")
+                elements_count = len(doc.parsed_content.get("elements", []))
+                warnings_count = len(doc.parsed_content.get("warnings", []))
+                parsed_at_raw = doc.parsed_content.get("parsed_at")
+                parsed_at = datetime.fromisoformat(parsed_at_raw) if parsed_at_raw else doc.updated_at
+                return DocumentParseResponse(
+                    document_id=doc.id,
+                    filename=doc.filename,
+                    status=DocumentStatus.PARSED,
+                    total_pages=doc.total_pages,
+                    word_count=doc.word_count or 0,
+                    char_count=doc.char_count or 0,
+                    total_elements=elements_count,
+                    warnings_count=warnings_count,
+                    parsed_at=parsed_at,
+                    message="Document already parsed (cached result)",
+                )
 
         # Step 3: Transition state to PROCESSING
         logger.info(f"Transitioning doc_id={document_id} to PROCESSING status.")
@@ -322,7 +343,18 @@ class DocumentService:
                 f"Elements={len(parsed_doc.elements)}, Words={parsed_doc.word_count}, "
                 f"Warnings={len(parsed_doc.warnings)}"
             )
-            return parsed_doc
+            return DocumentParseResponse(
+                document_id=doc.id,
+                filename=doc.filename,
+                status=DocumentStatus.PARSED,
+                total_pages=parsed_doc.total_pages,
+                word_count=parsed_doc.word_count,
+                char_count=parsed_doc.char_count,
+                total_elements=len(parsed_doc.elements),
+                warnings_count=len(parsed_doc.warnings),
+                parsed_at=parsed_doc.parsed_at,
+                message="Document parsed and persisted successfully",
+            )
 
         except AppException as app_exc:
             # Domain parsing exception (EncryptedDocumentError, EmptyDocumentError, CorruptedParsingError)

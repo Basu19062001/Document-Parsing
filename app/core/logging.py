@@ -108,3 +108,16 @@ def setup_logging(log_level: Optional[int] = None) -> None:
         u_logger.handlers.clear()
         u_logger.addHandler(handler)
         u_logger.propagate = False
+
+    # 4. Silence noisy third-party internal loggers (e.g. pdfminer byte tokens) to keep terminal focused
+    noisy_loggers = (
+        "pdfminer",
+        "pdfplumber",
+        "PIL",
+        "asyncio",
+        "sqlalchemy.engine",
+        "httpcore",
+        "httpx",
+    )
+    for noisy in noisy_loggers:
+        logging.getLogger(noisy).setLevel(logging.WARNING)

@@ -1,6 +1,7 @@
 from app.schemas.document import (
     DocumentBase,
     DocumentMetadata,
+    DocumentParseResponse,
     DocumentResponse,
     DocumentStatus,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "DocumentBase",
     "DocumentMetadata",
     "DocumentResponse",
+    "DocumentParseResponse",
     "DocumentStatus",
     "ElementType",
     "BaseElement",
